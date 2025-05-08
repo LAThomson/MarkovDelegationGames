@@ -1,0 +1,8 @@
+# Fruit Salad (Markov Delegation Games)
+
+Markov Delegation Games extend the normal-form delegation games found in [this paper](https://arxiv.org/abs/2402.15821) to the general Markov game case. In any given game, there are N human _principals_, each with their own AI _agent_; the agents take actions on behalf of their principals, earning rewards as they play. From the view of the principals, there are two ways such games could go against them: on the one hand, a principal's individual agent may not be working effectively towards the same goal as the principal (either because the agent wants something different, or because the agent just isn't very good at achieving what it's aiming for); and on the other hand, the agents may collectively fail to achieve good collaborative outcomes (again, either because the agents each want quite different things, or because the agents are bad at cooperating). This motivates quantifying measures of _individual_ and _collective_ alignment and capabilities.
+
+This code defines a particular Markov Delegation Game we call __Fruit Salad__, in which agents are competing to collect different kinds of fruit. These games enable running different experiments on how game parameters relate to the measures described above through three main features:
+    - Different kinds of fruit and differently fruit ripeness create dimensions for possible misalignments (both individual and collective);
+    - k-button gates give agents the opportunity to cooperate to collectively achieve better rewards; and
+    - Limited fruit resources incentivise agents (to some extent) to prioritise their own reward over others'.
