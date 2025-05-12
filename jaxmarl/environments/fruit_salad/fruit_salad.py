@@ -8,7 +8,6 @@ from jax import numpy as jnp
 import numpy as np
 from flax.core import FrozenDict
 
-import struct
 from functools import partial
 from typing import Tuple, Dict, Optional
 from enum import IntEnum
@@ -151,7 +150,7 @@ class Actions(IntEnum):
     interact = 4
     stay = 5
 
-@struct.dataclass
+@flax.struct.dataclass
 class State:                        # IMPORTANT: shape of each State channel must stay same throughout game for better efficiency
     agent_pos: chex.Array           # shape: (num_agents x 2), stores agent i's position as agent_pos[i] = [y, x]
     wall_pos: chex.Array            # shape: (height x width), stores wall positions with 1s and empty with 0s
@@ -194,6 +193,10 @@ class FruitSalad(MultiAgentEnv):
 
         self.layout = layout
         self.agents = [f"agent_{i}" for i in range(self.num_agents)]
+        self.fruits = ["apple", "ripe_apple", "banana", "ripe_banana", "cherry", "ripe_cherry"]
+
+        self.reward_values = jnp.array([[REWARDS[agent][fruit] for fruit in self.fruits] for agent in self.agents])
+        self.reward_coefficients = jnp.array([[REWARDS[agent][f"{other_agent}_coefficient"] for other_agent in self.agents] for agent in self.agents])
 
         self.action_set = jnp.array([
             Actions.up,
@@ -216,49 +219,59 @@ class FruitSalad(MultiAgentEnv):
 
         # get agent_idx and convert to y-x coordinates, then shuffle order and limit to num_agents
         agent_idx = layout.get("agent_idx")
-        agent_pos = jnp.array([agent_idx // width, agent_idx % width], dtype=jnp.uint32).transpose()
+        agent_pos = jnp.array([agent_idx // width, agent_idx % width], dtype=jnp.uint8).transpose()
         key, subkey = jax.random.split(key)
         agent_pos = jax.random.permutation(subkey, agent_pos)
         agent_pos = agent_pos[:num_agents]
 
         # create an array to help convert from index to matrix format
-        all_pos = np.arange(np.prod([height, width]), dtype=jnp.uint8)
+        num_pos = np.prod([height, width])
+        all_pos = np.arange(num_pos, dtype=jnp.uint8)
         
         # set up walls, switches, and gates
         wall_idx = layout.get("wall_idx")
+        wall_idx = jnp.append(wall_idx, num_pos)
         wall_occupied = jnp.zeros_like(all_pos).at[wall_idx].set(1)
         wall_pos = wall_occupied.reshape((height, width))
 
         switch_idx = layout.get("switch_idx")
+        switch_idx = jnp.append(switch_idx, num_pos)
         switch_occupied = jnp.zeros_like(all_pos).at[switch_idx].set(1)
         switch_pos = switch_occupied.reshape((height, width))
 
         gate_idx = layout.get("gate_idx")
+        gate_idx = jnp.append(gate_idx, num_pos)
         gate_occupied = jnp.zeros_like(all_pos).at[gate_idx].set(1)
         gate_pos = gate_occupied.reshape((height, width))
 
         # also set up all the fruit
         apple_idx = layout.get("apple_idx")
+        apple_idx = jnp.append(apple_idx, num_pos)
         apple_occupied = jnp.zeros_like(all_pos).at[apple_idx].set(1)
         apple_pos = apple_occupied.reshape((height, width))
 
         ripe_apple_idx = layout.get("ripe_apple_idx")
+        ripe_apple_idx = jnp.append(ripe_apple_idx, num_pos)
         ripe_apple_occupied = jnp.zeros_like(all_pos).at[ripe_apple_idx].set(1)
         ripe_apple_pos = ripe_apple_occupied.reshape((height, width))
         
         banana_idx = layout.get("banana_idx")
+        banana_idx = jnp.append(banana_idx, num_pos)
         banana_occupied = jnp.zeros_like(all_pos).at[banana_idx].set(1)
         banana_pos = banana_occupied.reshape((height, width))
 
         ripe_banana_idx = layout.get("ripe_banana_idx")
+        ripe_banana_idx = jnp.append(ripe_banana_idx, num_pos)
         ripe_banana_occupied = jnp.zeros_like(all_pos).at[ripe_banana_idx].set(1)
         ripe_banana_pos = ripe_banana_occupied.reshape((height, width))
         
         cherry_idx = layout.get("cherry_idx")
+        cherry_idx = jnp.append(cherry_idx, num_pos)
         cherry_occupied = jnp.zeros_like(all_pos).at[cherry_idx].set(1)
         cherry_pos = cherry_occupied.reshape((height, width))
 
         ripe_cherry_idx = layout.get("ripe_cherry_idx")
+        ripe_cherry_idx = jnp.append(ripe_cherry_idx, num_pos)
         ripe_cherry_occupied = jnp.zeros_like(all_pos).at[ripe_cherry_idx].set(1)
         ripe_cherry_pos = ripe_cherry_occupied.reshape((height, width))
 
@@ -274,7 +287,7 @@ class FruitSalad(MultiAgentEnv):
             cherry_pos=cherry_pos,
             ripe_cherry_pos=ripe_cherry_pos,
             gate_open=False,
-            time=0,
+            time=jnp.array(0, dtype=jnp.uint32),
             terminal=False,
         )
 
@@ -287,10 +300,7 @@ class FruitSalad(MultiAgentEnv):
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         """Environment-specific step transition."""
 
-        def _get_agent_action(i : int, actions : Dict[str, chex.Array]) -> Actions:
-            return self.action_set.take(indices=actions[f"agent_{i}"])
-        batch_get_action = jax.vmap(_get_agent_action, in_axes=[0, None])
-        acts = batch_get_action(jnp.arange(self.num_agents), actions)
+        acts = self.action_set.take(indices=jnp.array(list(actions.values())))
 
         state, rewards = self.step_agents(key, state, acts)
 
@@ -300,8 +310,8 @@ class FruitSalad(MultiAgentEnv):
         state = state.replace(terminal=done)
 
         obs = self.get_obs(state)
-        dones = {f"agent_{i}": done for i in range(self.num_agents)}
-        dones["__all__": done]
+        dones = {f"agent_{i}": done for i in jnp.arange(self.num_agents)}
+        dones["__all__"] = done
 
         return (
             jax.lax.stop_gradient(obs),
@@ -332,8 +342,8 @@ class FruitSalad(MultiAgentEnv):
 
         #    (b): check end positions don't clash with impassable tiles or other agents' end positions (else no move)
         batch_compare = jax.vmap(lambda agent_pos, other_pos : jax.vmap(lambda x, y : jnp.all(x == y), in_axes=[None, 0])(agent_pos, other_pos), in_axes=[0, None])
-        wall_idx = jnp.flatnonzero(state.wall_pos)
-        wall_coords = [wall_idx // width, wall_idx % width]
+        wall_idx = self.layout["wall_idx"]
+        wall_coords = jnp.array(list(zip(*[wall_idx // width, wall_idx % width])))
         wall_collisions = jnp.any(batch_compare(agent_pos_after, wall_coords), axis=1)
         other_agent_collisions = jnp.sum(batch_compare(agent_pos_after, agent_pos_after), axis=1) > 1
         collision_mask = wall_collisions | other_agent_collisions
@@ -341,6 +351,7 @@ class FruitSalad(MultiAgentEnv):
         #    (c): set agents' new positions to (collision_mask)*new_positions + (1-collision_mask)*old_positions
         reshaped_collision_mask = jnp.expand_dims(collision_mask, axis=1) # needed to make broadcasting work!
         new_agent_pos = (reshaped_collision_mask)*agent_pos_after + (1 - reshaped_collision_mask)*agent_pos_before
+        new_agent_pos = jnp.astype(new_agent_pos, jnp.uint8)
 
         # step 2: AGENT INTERACTION
         #    (a): assume agent takes interact action and process result
@@ -361,8 +372,8 @@ class FruitSalad(MultiAgentEnv):
         gate_open = state.gate_open
 
         #    (b): check if all switches are interacted with simultaneously
-        switch_idx = jnp.flatnonzero(state.switch_pos)
-        switch_coords = [switch_idx // width, switch_idx % width]
+        switch_idx = self.layout["switch_idx"]
+        switch_coords = jnp.array(list(zip(*[switch_idx // width, switch_idx % width])))
         all_agent_switch_collisions = batch_compare(state.agent_pos, switch_coords)
         agent_interacts_on_switch = reshaped_is_interact * all_agent_switch_collisions
         switch_is_interacted_with = jnp.any(agent_interacts_on_switch, axis=0)
@@ -389,28 +400,27 @@ class FruitSalad(MultiAgentEnv):
         self,
         state: State,
         agent_idx: int,
-    ) -> chex.Array[chex.Array, Dict[str, float]]:
+    ) -> Tuple[chex.Array, Dict[str, float]]:
         """Assume agent took interact actions. Result depends on whether the agent is standing on a fruit."""
         # get agent's and fruits' positions
         agent_pos = state.agent_pos[agent_idx]
         fruit_maps = jnp.array([state.apple_pos, state.ripe_apple_pos, state.banana_pos, state.ripe_banana_pos, state.cherry_pos, state.ripe_cherry_pos])
 
         # get corresponding rewards and coefficients
-        rds = REWARDS[f"agent_{agent_idx}"]
-        agent_reward_values = jnp.array([rds["apple"], rds["ripe_apple"], rds["banana"], rds["ripe_banana"], rds["cherry"], rds["ripe_cherry"],])
-        batch_get_coefficients = jax.vmap(lambda i, agent_idx : REWARDS[f"agent_{i}"][f"agent_{agent_idx}_coefficient"], in_axes=[0, None])
+        agent_reward_values = self.reward_values[agent_idx]
+        batch_get_coefficients = jax.vmap(lambda i, agent_idx : self.reward_coefficients[i, agent_idx], in_axes=[0, None])
         coefficients = batch_get_coefficients(jnp.arange(self.num_agents), agent_idx)
 
         # check position against fruit locations
-        batch_is_on = jax.vmap(lambda fruit_map, agent_pos : fruit_map[agent_pos[0], agent_pos[1]] == 1, in_axes=[0, None])
+        batch_is_on = jax.vmap(lambda fruit_map, agent_pos : fruit_map[agent_pos[0], agent_pos[1]], in_axes=[0, None])
         agent_is_on = batch_is_on(fruit_maps, agent_pos) # assumption is AT MOST ONE of agent_is_on == True (max one fruit per grid position)
 
         # update fruit maps if agent is on fruit
-        reshaped_agent_is_on = jnp.expand_dims(agent_is_on, axis=1) # needed to make broadcasting work!
+        reshaped_agent_is_on = jnp.expand_dims(agent_is_on, axis=[1,2]) # needed to make broadcasting work!
         new_fruit_maps = (reshaped_agent_is_on)*fruit_maps.at[agent_pos[0], agent_pos[1]].set(-1) + (1-reshaped_agent_is_on)*fruit_maps
 
         # collate appropriate rewards for all agents
-        # fiddly calculation of raw_reward_value is to default to 0 if any(agent_is_on)==False [i.e. if agent not on fruit]
+        # fiddly calculation of raw_reward_value is to default to 0 if all(agent_is_on==False) [i.e. if agent not on fruit]
         raw_reward_value = jnp.concat([agent_reward_values, jnp.array([0])])[jnp.concat([agent_is_on, jnp.array([True])])].at[0].get()
         rewards = raw_reward_value * coefficients
 
@@ -426,7 +436,7 @@ class FruitSalad(MultiAgentEnv):
 
         Agent positions:
         0. position of agent i (1 at agent loc, 0 otherwise)
-        1-7*. position of all other agents (channel i doesn't exist if environment has num_agents <= i)
+        1-7*. positions of other agents (channel i doesn't exist if environment has num_agents <= i)
 
         Variable env channels (1 where object of type X is located, 0 otherwise):
         +1. impassable tile locations (i.e. walls, closed gates)
@@ -450,7 +460,7 @@ class FruitSalad(MultiAgentEnv):
             lambda i, agent_pos_channel, state : agent_pos_channel.at[state.agent_pos[i, 1], state.agent_pos[i, 0]].set(1),
             in_axes=[0, 0, None]
         )
-        agent_pos_channels = batch_add_agent_pos(range(self.num_agents), agent_pos_channels, state)
+        agent_pos_channels = batch_add_agent_pos(jnp.arange(self.num_agents), agent_pos_channels, state)
 
         # static env channels
         
@@ -475,16 +485,16 @@ class FruitSalad(MultiAgentEnv):
         switch_channel = jax.lax.select(                                # channel +8
             state.gate_open,
             state.switch_pos,
-            jnp.zeros(height, width, dtype=jnp.uint8)
+            jnp.zeros((height, width), dtype=jnp.uint8)
         )
         gate_channel = jax.lax.select(                                  # channel +9
             state.gate_open,
             state.gate_pos,
-            jnp.zeros(height, width, dtype=jnp.uint8)
+            jnp.zeros((height, width), dtype=jnp.uint8)
         )
 
         # stack all the environment channels together
-        env_channels = jnp.vstack(
+        env_channels = jnp.stack(jnp.array([
             impassable_channel,
             apple_channel,
             ripe_apple_channel,
@@ -493,19 +503,19 @@ class FruitSalad(MultiAgentEnv):
             cherry_channel,
             ripe_cherry_channel,
             switch_channel,
-            gate_channel
-        )
+            gate_channel,
+        ]))
 
-        # permute agent position channels to be agent-centred
-        batch_permute = jax.vmap(
-            lambda i, channels : jnp.moveaxis(channels, i, 0),
+        # roll agent position channels to be agent-centred
+        batch_roll = jax.vmap(
+            lambda i, channels : jnp.roll(channels, -i, axis=0),
             in_axes=[0, None]
         )
-        agent_centred_pos_channels = batch_permute(range(self.num_agents), agent_pos_channels)
+        agent_centred_pos_channels = batch_roll(jnp.arange(self.num_agents), agent_pos_channels)
         
         # compile the full observations for each agent
         batch_compile = jax.vmap(
-            lambda agent_channels, env_channels : jnp.concat(agent_channels, env_channels),
+            lambda agent_channels, env_channels : jnp.concat([agent_channels, env_channels]),
             in_axes=[0, None]
         )
         all_observations = batch_compile(agent_centred_pos_channels, env_channels)

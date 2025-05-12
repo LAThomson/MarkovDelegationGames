@@ -22,16 +22,16 @@ small_2p = {
                             16,23,
                             24,31,
                             32,39,
-                            40,41,42,43,44,45,46,47]),
-    "agent_idx" : jnp.array([34, 37]),
-    "apple_idx" : jnp.array([17]),
-    "ripe_apple_idx" : jnp.array([]),
-    "banana_idx" : jnp.array([12]),
-    "ripe_banana_idx" : jnp.array([11]),
-    "cherry_idx" : jnp.array([22]),
-    "ripe_cherry_idx" : jnp.array([]),
-    "switch_idx" : jnp.array([]),
-    "gate_idx" : jnp.array([]),
+                            40,41,42,43,44,45,46,47], dtype=jnp.uint8),
+    "agent_idx" : jnp.array([34, 37], dtype=jnp.uint8),
+    "apple_idx" : jnp.array([17], dtype=jnp.uint8),
+    "ripe_apple_idx" : jnp.array([], dtype=jnp.uint8),
+    "banana_idx" : jnp.array([12], dtype=jnp.uint8),
+    "ripe_banana_idx" : jnp.array([11], dtype=jnp.uint8),
+    "cherry_idx" : jnp.array([22], dtype=jnp.uint8),
+    "ripe_cherry_idx" : jnp.array([], dtype=jnp.uint8),
+    "switch_idx" : jnp.array([], dtype=jnp.uint8),
+    "gate_idx" : jnp.array([], dtype=jnp.uint8),
 }
 
 # Example of simple layout
@@ -105,7 +105,7 @@ def layout_grid_to_dict(grid):
 
     layout_dict = {key : [] for key in keys}
     layout_dict["height"] = len(rows)
-    layout_dict["width"] = len(rows[0])
+    layout_dict["width"] = len(rows[0].split())
     width = len(rows[0])
 
     for i, row in enumerate(rows):
@@ -123,7 +123,7 @@ def layout_grid_to_dict(grid):
 
     for key in symbol_to_key.values():
         # Transform lists to arrays
-        layout_dict[key] = jnp.array(layout_dict[key])
+        layout_dict[key] = jnp.array(layout_dict[key], dtype=jnp.uint8)
 
     return FrozenDict(layout_dict)
 
