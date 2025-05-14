@@ -310,7 +310,7 @@ class FruitSalad(MultiAgentEnv):
         state = state.replace(terminal=done)
 
         obs = self.get_obs(state)
-        dones = {f"agent_{i}": done for i in jnp.arange(self.num_agents)}
+        dones = {agent: done for agent in self.agents}
         dones["__all__"] = done
 
         return (
@@ -366,6 +366,7 @@ class FruitSalad(MultiAgentEnv):
         #    (c): dish out rewards to agents
         reshaped_is_interact = jnp.expand_dims(is_interact, axis=1) # needed to make broadcasting work!
         new_rewards = jnp.sum((reshaped_is_interact)*(interact_rewards) + (1-reshaped_is_interact)*(jnp.zeros(self.num_agents)), axis=0)
+        new_rewards = dict(zip(self.agents, new_rewards))
         
         # step 3: SWITCHES
         #    (a): check if gates are already open
@@ -391,8 +392,7 @@ class FruitSalad(MultiAgentEnv):
                 ripe_banana_pos=new_fruit_maps[3],
                 cherry_pos=new_fruit_maps[4],
                 ripe_cherry_pos=new_fruit_maps[5],
-                gate_open=new_gate_open,
-                terminal=False),
+                gate_open=new_gate_open,),
             new_rewards,
         )
 
