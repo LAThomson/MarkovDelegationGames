@@ -350,7 +350,7 @@ class FruitSalad(MultiAgentEnv):
         
         #    (c): set agents' new positions to (collision_mask)*new_positions + (1-collision_mask)*old_positions
         reshaped_collision_mask = jnp.expand_dims(collision_mask, axis=1) # needed to make broadcasting work!
-        new_agent_pos = (reshaped_collision_mask)*agent_pos_after + (1 - reshaped_collision_mask)*agent_pos_before
+        new_agent_pos = (reshaped_collision_mask)*agent_pos_before + (1 - reshaped_collision_mask)*agent_pos_after
         new_agent_pos = jnp.astype(new_agent_pos, jnp.uint8)
 
         # step 2: AGENT INTERACTION
