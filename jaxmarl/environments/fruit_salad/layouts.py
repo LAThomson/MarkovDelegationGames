@@ -106,11 +106,11 @@ def layout_grid_to_dict(grid):
     layout_dict = {key : [] for key in keys}
     layout_dict["height"] = len(rows)
     layout_dict["width"] = len(rows[0].split())
-    width = len(rows[0])
+    width = len(rows[0].split())
 
-    for i, row in enumerate(rows):
-        for j, obj in enumerate(row.split()):
-            idx = width * i + j
+    for j, row in enumerate(rows):
+        for i, obj in enumerate(row.split()):
+            idx = width * j + i
             if obj in symbol_to_key.keys():
                 # Add object
                 layout_dict[symbol_to_key[obj]].append(idx)
