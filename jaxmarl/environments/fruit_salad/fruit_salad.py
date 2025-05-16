@@ -494,7 +494,7 @@ class FruitSalad(MultiAgentEnv):
         )
 
         # stack all the environment channels together
-        env_channels = jnp.stack(jnp.array([
+        env_channels = jnp.stack([
             impassable_channel,
             apple_channel,
             ripe_apple_channel,
@@ -504,7 +504,7 @@ class FruitSalad(MultiAgentEnv):
             ripe_cherry_channel,
             switch_channel,
             gate_channel,
-        ]))
+        ])
 
         # roll agent position channels to be agent-centred
         batch_roll = jax.vmap(
